@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Copy, Download, Edit2, Save, X, FileText, Clock, History, RotateCcw, ChevronRight } from "lucide-react";
+import { Copy, Download, Edit2, Save, X, FileText, Clock, History, RotateCcw, ChevronRight, FileJson, FileCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Document, DocumentVersion } from "@shared/schema";
@@ -283,14 +284,27 @@ export function DocumentViewer({
               >
                 <Copy className="h-4 w-4" />
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleDownload("markdown")}
-                data-testid="button-download-document"
-              >
-                <Download className="h-4 w-4" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    data-testid="button-download-document"
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleDownload("markdown")} data-testid="menu-download-markdown">
+                    <FileCode className="h-4 w-4 mr-2" />
+                    Download as Markdown
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleDownload("json")} data-testid="menu-download-json">
+                    <FileJson className="h-4 w-4 mr-2" />
+                    Download as JSON
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button
                 variant="ghost"
                 size="icon"
