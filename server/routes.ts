@@ -405,5 +405,72 @@ export async function registerRoutes(
     }
   });
 
+  // Validate document specification
+  app.post("/api/documents/:id/validate", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid document ID" });
+      }
+      const document = await storage.getDocument(id);
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      const constitution = await storage.getConstitution();
+
+      const validationPrompt = `You are a specification quality reviewer. Analyze the following document and provide a detailed validation report.
+
+Document Title: ${document.title}
+Document Type: ${document.outputType}
+Agent Type: ${document.agentType}
+
+Document Content:
+${document.content}
+
+${constitution ? `Constitutional Standards:
+${constitution}` : ""}
+
+Provide a validation report in the following JSON format:
+{
+  "overallScore": <number 0-100>,
+  "status": "pass" | "warning" | "fail",
+  "categories": [
+    {
+      "name": "Category Name",
+      "score": <number 0-100>,
+      "status": "pass" | "warning" | "fail",
+      "findings": ["finding 1", "finding 2"]
+    }
+  ],
+  "suggestions": ["suggestion 1", "suggestion 2"],
+  "summary": "Overall summary of the validation"
+}
+
+Evaluate these categories:
+1. Completeness - Does the document cover all required sections?
+2. Clarity - Is the content clear and unambiguous?
+3. Consistency - Are terms and formats used consistently?
+4. Actionability - Can the content be acted upon?
+5. Constitutional Compliance - Does it follow the defined standards (if any)?
+
+Respond ONLY with valid JSON.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: validationPrompt }
+        ],
+        response_format: { type: "json_object" }
+      });
+
+      const validationResult = JSON.parse(response.choices[0]?.message?.content || "{}");
+      res.json(validationResult);
+    } catch (error) {
+      console.error("Error validating document:", error);
+      res.status(500).json({ error: "Failed to validate document" });
+    }
+  });
+
   return httpServer;
 }

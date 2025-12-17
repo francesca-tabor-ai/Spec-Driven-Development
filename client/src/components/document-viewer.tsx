@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { ValidationPanel } from "@/components/validation-panel";
 import type { Document, DocumentVersion } from "@shared/schema";
 
 interface DocumentViewerProps {
@@ -276,6 +277,7 @@ export function DocumentViewer({
                   </div>
                 </SheetContent>
               </Sheet>
+              <ValidationPanel document={document} />
               <Button
                 variant="ghost"
                 size="icon"
