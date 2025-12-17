@@ -215,7 +215,7 @@ export default function WorkflowDetailPage() {
               </SheetHeader>
               <div className="mt-6">
                 <ContextVariablesEditor
-                  variables={workflow.contextVariables}
+                  variables={workflow.contextVariables || []}
                   onChange={(vars) => updateWorkflowMutation.mutate({ contextVariables: vars })}
                 />
               </div>
@@ -322,6 +322,21 @@ export default function WorkflowDetailPage() {
             <DocumentViewer
               document={selectedDocument}
               onClose={() => setSelectedDocument(null)}
+              onSave={async (content) => {
+                const res = await apiRequest("PATCH", `/api/documents/${selectedDocument.id}`, { content });
+                const updatedDoc = await res.json();
+                queryClient.invalidateQueries({ queryKey: ["/api/workflows", workflowId, "documents"] });
+                queryClient.invalidateQueries({ queryKey: [`/api/documents/${selectedDocument.id}/versions`] });
+                setSelectedDocument(updatedDoc);
+                toast({
+                  title: "Document saved",
+                  description: "Your changes have been saved."
+                });
+              }}
+              onDocumentUpdate={(doc) => {
+                setSelectedDocument(doc);
+                queryClient.invalidateQueries({ queryKey: ["/api/workflows", workflowId, "documents"] });
+              }}
             />
           ) : (
             <div className="h-full flex items-center justify-center">

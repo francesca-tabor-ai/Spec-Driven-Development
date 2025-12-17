@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { Copy, Download, Edit2, Eye, Save, X, FileText, Clock, CheckCircle2 } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Copy, Download, Edit2, Save, X, FileText, Clock, History, RotateCcw, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
-import type { Document } from "@shared/schema";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { Document, DocumentVersion } from "@shared/schema";
 
 interface DocumentViewerProps {
   document: Document | null;
@@ -14,6 +17,7 @@ interface DocumentViewerProps {
   streamingContent?: string;
   onSave?: (content: string) => void;
   onClose?: () => void;
+  onDocumentUpdate?: (doc: Document) => void;
 }
 
 export function DocumentViewer({
@@ -21,11 +25,46 @@ export function DocumentViewer({
   isLoading = false,
   streamingContent,
   onSave,
-  onClose
+  onClose,
+  onDocumentUpdate
 }: DocumentViewerProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [selectedVersion, setSelectedVersion] = useState<DocumentVersion | null>(null);
   const { toast } = useToast();
+
+  const { data: versions = [] } = useQuery<DocumentVersion[]>({
+    queryKey: [`/api/documents/${document?.id}/versions`],
+    enabled: !!document?.id
+  });
+
+  const restoreVersionMutation = useMutation({
+    mutationFn: async (version: DocumentVersion): Promise<Document> => {
+      const res = await apiRequest("PATCH", `/api/documents/${document?.id}`, {
+        content: version.content
+      });
+      return res.json();
+    },
+    onSuccess: (restoredDoc: Document) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/workflows"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/documents/${document?.id}/versions`] });
+      setShowVersionHistory(false);
+      setSelectedVersion(null);
+      onDocumentUpdate?.(restoredDoc);
+      toast({
+        title: "Version restored",
+        description: "Document has been reverted to the selected version."
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to restore version.",
+        variant: "destructive"
+      });
+    }
+  });
 
   const content = streamingContent || document?.content || "";
 
@@ -37,12 +76,33 @@ export function DocumentViewer({
     });
   };
 
-  const handleDownload = () => {
-    const blob = new Blob([content], { type: "text/markdown" });
+  const handleDownload = (format: "markdown" | "json" = "markdown") => {
+    if (!document) return;
+    
+    if (format === "json") {
+      const jsonContent = JSON.stringify({
+        title: document.title,
+        content: document.content,
+        outputType: document.outputType,
+        agentType: document.agentType,
+        version: document.version,
+        createdAt: document.createdAt,
+        updatedAt: document.updatedAt
+      }, null, 2);
+      const blob = new Blob([jsonContent], { type: "application/json" });
+      downloadBlob(blob, `${document.title}.json`);
+    } else {
+      const markdownContent = `# ${document.title}\n\n${document.content}`;
+      const blob = new Blob([markdownContent], { type: "text/markdown" });
+      downloadBlob(blob, `${document.title}.md`);
+    }
+  };
+
+  const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
     const a = window.document.createElement("a");
     a.href = url;
-    a.download = `${document?.title || "document"}.md`;
+    a.download = filename;
     window.document.body.appendChild(a);
     a.click();
     window.document.body.removeChild(a);
@@ -62,6 +122,10 @@ export function DocumentViewer({
   const handleCancelEdit = () => {
     setIsEditing(false);
     setEditContent("");
+  };
+
+  const handleRestoreVersion = (version: DocumentVersion) => {
+    restoreVersionMutation.mutate(version);
   };
 
   if (!document && !streamingContent && !isLoading) {
@@ -89,10 +153,15 @@ export function DocumentViewer({
             <h2 className="font-medium text-sm truncate" data-testid="text-document-title">
               {isLoading ? "Generating..." : document?.title || "New Document"}
             </h2>
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               {document?.outputType && (
                 <Badge variant="secondary" className="text-xs">
                   {document.outputType}
+                </Badge>
+              )}
+              {document?.version && document.version > 1 && (
+                <Badge variant="outline" className="text-xs">
+                  v{document.version}
                 </Badge>
               )}
               {isLoading && (
@@ -106,8 +175,106 @@ export function DocumentViewer({
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
-          {!isLoading && !isEditing && (
+          {!isLoading && !isEditing && document && (
             <>
+              <Sheet open={showVersionHistory} onOpenChange={setShowVersionHistory}>
+                <SheetTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    data-testid="button-version-history"
+                    disabled={versions.length === 0}
+                  >
+                    <History className="h-4 w-4" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent className="w-[400px] sm:w-[540px]">
+                  <SheetHeader>
+                    <SheetTitle className="flex items-center gap-2">
+                      <History className="h-5 w-5" />
+                      Version History
+                    </SheetTitle>
+                  </SheetHeader>
+                  <div className="mt-4">
+                    {versions.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <History className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                        <p className="text-sm">No previous versions</p>
+                        <p className="text-xs mt-1">Edit and save the document to create version history</p>
+                      </div>
+                    ) : (
+                      <ScrollArea className="h-[calc(100vh-200px)]">
+                        <div className="space-y-2 pr-4">
+                          <div
+                            className={`p-3 rounded-md border cursor-pointer hover-elevate ${
+                              !selectedVersion ? "border-primary bg-primary/5" : ""
+                            }`}
+                            onClick={() => setSelectedVersion(null)}
+                            data-testid="version-current"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="default" className="text-xs">Current</Badge>
+                                <span className="text-xs text-muted-foreground">v{document.version}</span>
+                              </div>
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                              {document.content.substring(0, 100)}...
+                            </p>
+                          </div>
+                          {versions.map((version) => (
+                            <div
+                              key={version.id}
+                              className={`p-3 rounded-md border cursor-pointer hover-elevate ${
+                                selectedVersion?.id === version.id ? "border-primary bg-primary/5" : ""
+                              }`}
+                              onClick={() => setSelectedVersion(version)}
+                              data-testid={`version-${version.version}`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="text-xs">v{version.version}</Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(version.createdAt).toLocaleString()}
+                                  </span>
+                                </div>
+                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                {version.content.substring(0, 100)}...
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    )}
+                    {selectedVersion && (
+                      <div className="mt-4 pt-4 border-t">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-medium">
+                            Preview: Version {selectedVersion.version}
+                          </span>
+                          <Button
+                            size="sm"
+                            onClick={() => handleRestoreVersion(selectedVersion)}
+                            disabled={restoreVersionMutation.isPending}
+                            data-testid="button-restore-version"
+                          >
+                            <RotateCcw className="h-4 w-4 mr-1" />
+                            Restore
+                          </Button>
+                        </div>
+                        <ScrollArea className="h-48 mt-2 border rounded-md">
+                          <pre className="p-3 text-xs font-mono whitespace-pre-wrap">
+                            {selectedVersion.content}
+                          </pre>
+                        </ScrollArea>
+                      </div>
+                    )}
+                  </div>
+                </SheetContent>
+              </Sheet>
               <Button
                 variant="ghost"
                 size="icon"
@@ -119,7 +286,7 @@ export function DocumentViewer({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={handleDownload}
+                onClick={() => handleDownload("markdown")}
                 data-testid="button-download-document"
               >
                 <Download className="h-4 w-4" />
@@ -194,11 +361,19 @@ export function DocumentViewer({
       {document?.createdAt && !isLoading && (
         <>
           <Separator />
-          <div className="flex items-center justify-between p-3 text-xs text-muted-foreground">
+          <div className="flex items-center justify-between gap-4 p-3 text-xs text-muted-foreground flex-wrap">
             <span>Created: {new Date(document.createdAt).toLocaleString()}</span>
-            {document.updatedAt !== document.createdAt && (
-              <span>Updated: {new Date(document.updatedAt).toLocaleString()}</span>
-            )}
+            <div className="flex items-center gap-4">
+              {document.updatedAt && document.updatedAt !== document.createdAt && (
+                <span>Updated: {new Date(document.updatedAt).toLocaleString()}</span>
+              )}
+              {versions.length > 0 && (
+                <span className="flex items-center gap-1">
+                  <History className="h-3 w-3" />
+                  {versions.length} previous {versions.length === 1 ? "version" : "versions"}
+                </span>
+              )}
+            </div>
           </div>
         </>
       )}
