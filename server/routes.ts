@@ -2,8 +2,25 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import OpenAI from "openai";
 import { z } from "zod";
+import multer from "multer";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const pdfParse = require("pdf-parse");
 import { storage } from "./storage";
 import { getPromptForAgent, getOutputTypeForAgent } from "./prompts";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ["application/pdf", "text/plain"];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only PDF and TXT files are allowed"));
+    }
+  }
+});
 import { 
   defaultContextVariables, 
   agentTypes,
@@ -469,6 +486,84 @@ Respond ONLY with valid JSON.`;
     } catch (error) {
       console.error("Error validating document:", error);
       res.status(500).json({ error: "Failed to validate document" });
+    }
+  });
+
+  // File upload - PDF or TXT
+  app.post("/api/upload", upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      let textContent = "";
+      const fileName = req.file.originalname;
+
+      if (req.file.mimetype === "application/pdf") {
+        const pdfData = await pdfParse(req.file.buffer);
+        textContent = pdfData.text;
+      } else if (req.file.mimetype === "text/plain") {
+        textContent = req.file.buffer.toString("utf-8");
+      }
+
+      res.json({
+        fileName,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        textContent: textContent.trim()
+      });
+    } catch (error) {
+      console.error("Error processing file:", error);
+      res.status(500).json({ error: "Failed to process file" });
+    }
+  });
+
+  // Decision framework recommendation
+  app.post("/api/decision-framework/recommend", async (req: Request, res: Response) => {
+    try {
+      const { answers } = req.body;
+
+      const prompt = `You are an SDDD (Spec-Driven Development) methodology expert. Based on the following project characteristics, recommend the best SDDD tools and methodologies.
+
+Project Characteristics:
+${Object.entries(answers).map(([key, value]) => `- ${key}: ${value}`).join("\n")}
+
+Evaluate these SDDD methodologies:
+1. AWS Kiro - AWS's spec-driven development tool
+2. GitHub Spec Kit - GitHub's specification toolkit
+3. OpenSpec - Open-source specification framework
+4. BMAD Method - Business-focused methodology
+
+Provide recommendations in this JSON format:
+{
+  "recommendations": [
+    {
+      "tool": "Tool Name",
+      "score": <0-100 match percentage>,
+      "description": "Brief description",
+      "strengths": ["strength 1", "strength 2"],
+      "considerations": ["consideration 1", "consideration 2"],
+      "bestFor": "Ideal use case"
+    }
+  ],
+  "summary": "Overall recommendation summary",
+  "projectProfile": "Description of the project profile based on answers"
+}
+
+Order recommendations by score (highest first). Include 3-4 recommendations.
+Respond ONLY with valid JSON.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "system", content: prompt }],
+        response_format: { type: "json_object" }
+      });
+
+      const result = JSON.parse(response.choices[0]?.message?.content || "{}");
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating recommendations:", error);
+      res.status(500).json({ error: "Failed to generate recommendations" });
     }
   });
 

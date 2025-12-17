@@ -12,6 +12,7 @@ import WorkflowsPage from "@/pages/workflows";
 import WorkflowDetailPage from "@/pages/workflow-detail";
 import ConstitutionPage from "@/pages/constitution";
 import AgentPage from "@/pages/agent";
+import DecisionFrameworkPage from "@/pages/decision-framework";
 import { useState } from "react";
 import { NewWorkflowDialog } from "@/components/new-workflow-dialog";
 import { useMutation } from "@tanstack/react-query";
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/workflow/:workflowId" component={WorkflowDetailPage} />
       <Route path="/constitution" component={ConstitutionPage} />
       <Route path="/agent/:agentType" component={AgentPage} />
+      <Route path="/decision-framework" component={DecisionFrameworkPage} />
       <Route component={NotFound} />
     </Switch>
   );

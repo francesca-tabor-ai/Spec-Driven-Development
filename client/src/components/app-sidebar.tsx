@@ -9,7 +9,9 @@ import {
   ScrollText,
   FolderOpen,
   Settings,
-  Plus
+  Plus,
+  HelpCircle,
+  Upload
 } from "lucide-react";
 import {
   Sidebar,
@@ -38,7 +40,8 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { title: "Dashboard", url: "/", icon: Home },
   { title: "Workflows", url: "/workflows", icon: FolderOpen },
-  { title: "Constitution", url: "/constitution", icon: ScrollText }
+  { title: "Constitution", url: "/constitution", icon: ScrollText },
+  { title: "Decision Framework", url: "/decision-framework", icon: HelpCircle }
 ];
 
 interface AgentNavItem extends NavItem {

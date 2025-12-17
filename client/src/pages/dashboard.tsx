@@ -8,7 +8,8 @@ import {
   Clock,
   Plus,
   ArrowRight,
-  Sparkles
+  Sparkles,
+  Upload
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AgentCard } from "@/components/agent-card";
 import { WorkflowCard, WorkflowCardSkeleton } from "@/components/workflow-card";
 import { NewWorkflowDialog } from "@/components/new-workflow-dialog";
+import { FileUpload } from "@/components/file-upload";
 import { agents, type Workflow, type AgentType } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -86,10 +88,13 @@ export default function Dashboard() {
               Execute Spec-Driven Development workflows with AI agents
             </p>
           </div>
-          <Button onClick={() => setShowNewWorkflow(true)} data-testid="button-new-workflow-header">
-            <Plus className="h-4 w-4 mr-1.5" />
-            New Workflow
-          </Button>
+          <div className="flex items-center gap-2">
+            <FileUpload />
+            <Button onClick={() => setShowNewWorkflow(true)} data-testid="button-new-workflow-header">
+              <Plus className="h-4 w-4 mr-1.5" />
+              New Workflow
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
