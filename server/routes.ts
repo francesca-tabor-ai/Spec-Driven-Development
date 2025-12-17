@@ -7,7 +7,6 @@ import { getPromptForAgent, getOutputTypeForAgent } from "./prompts";
 import { 
   defaultContextVariables, 
   agentTypes,
-  insertWorkflowSchema,
   contextVariableSchema,
   type AgentType, 
   type ContextVariable 
@@ -24,7 +23,6 @@ const executeAgentBodySchema = z.object({
   contextVariables: z.array(contextVariableSchema).optional()
 });
 
-// the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
@@ -58,7 +56,11 @@ export async function registerRoutes(
 
   app.get("/api/workflows/:id", async (req: Request, res: Response) => {
     try {
-      const workflow = await storage.getWorkflow(req.params.id);
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid workflow ID" });
+      }
+      const workflow = await storage.getWorkflow(id);
       if (!workflow) {
         return res.status(404).json({ error: "Workflow not found" });
       }
@@ -100,7 +102,11 @@ export async function registerRoutes(
 
   app.patch("/api/workflows/:id", async (req: Request, res: Response) => {
     try {
-      const workflow = await storage.updateWorkflow(req.params.id, req.body);
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid workflow ID" });
+      }
+      const workflow = await storage.updateWorkflow(id, req.body);
       if (!workflow) {
         return res.status(404).json({ error: "Workflow not found" });
       }
@@ -113,7 +119,11 @@ export async function registerRoutes(
 
   app.delete("/api/workflows/:id", async (req: Request, res: Response) => {
     try {
-      await storage.deleteWorkflow(req.params.id);
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid workflow ID" });
+      }
+      await storage.deleteWorkflow(id);
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting workflow:", error);
@@ -123,7 +133,11 @@ export async function registerRoutes(
 
   app.post("/api/workflows/:id/duplicate", async (req: Request, res: Response) => {
     try {
-      const workflow = await storage.duplicateWorkflow(req.params.id);
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid workflow ID" });
+      }
+      const workflow = await storage.duplicateWorkflow(id);
       if (!workflow) {
         return res.status(404).json({ error: "Workflow not found" });
       }
@@ -137,7 +151,11 @@ export async function registerRoutes(
   // Workflow documents
   app.get("/api/workflows/:id/documents", async (req: Request, res: Response) => {
     try {
-      const documents = await storage.getDocumentsByWorkflow(req.params.id);
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid workflow ID" });
+      }
+      const documents = await storage.getDocumentsByWorkflow(id);
       res.json(documents);
     } catch (error) {
       console.error("Error getting documents:", error);
@@ -148,24 +166,25 @@ export async function registerRoutes(
   // Execute workflow
   app.post("/api/workflows/:id/execute", async (req: Request, res: Response) => {
     try {
-      const workflow = await storage.getWorkflow(req.params.id);
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid workflow ID" });
+      }
+      const workflow = await storage.getWorkflow(id);
       if (!workflow) {
         return res.status(404).json({ error: "Workflow not found" });
       }
 
-      // Set up SSE
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
       const constitution = await storage.getConstitution();
-      const contextVariables = workflow.contextVariables;
+      const contextVariables = workflow.contextVariables || [];
 
-      // Update workflow status
-      await storage.updateWorkflow(req.params.id, { status: "in_progress" });
+      await storage.updateWorkflow(id, { status: "in_progress" });
 
-      // Get the starting agent
-      const agentType = workflow.currentAgent || "analyst";
+      const agentType = (workflow.currentAgent || "analyst") as AgentType;
       const prompt = getPromptForAgent(agentType, contextVariables, constitution);
       const outputType = getOutputTypeForAgent(agentType);
 
@@ -173,13 +192,13 @@ export async function registerRoutes(
 
       try {
         const stream = await openai.chat.completions.create({
-          model: "gpt-5",
+          model: "gpt-4o",
           messages: [
             { role: "system", content: prompt },
             { role: "user", content: "Generate the specification document based on the provided context. Be thorough and professional." }
           ],
           stream: true,
-          max_completion_tokens: 8192
+          max_tokens: 8192
         });
 
         let fullContent = "";
@@ -192,22 +211,20 @@ export async function registerRoutes(
           }
         }
 
-        // Save the document
         const document = await storage.createDocument({
-          workflowId: req.params.id,
+          workflowId: id,
           agentType,
           title: `${outputType} - ${new Date().toLocaleDateString()}`,
           content: fullContent,
           outputType
         });
 
-        // Update workflow status
-        await storage.updateWorkflow(req.params.id, { status: "completed" });
+        await storage.updateWorkflow(id, { status: "completed" });
 
         res.write(`data: ${JSON.stringify({ done: true, document })}\n\n`);
       } catch (error) {
         console.error("OpenAI error:", error);
-        await storage.updateWorkflow(req.params.id, { status: "error" });
+        await storage.updateWorkflow(id, { status: "error" });
         res.write(`data: ${JSON.stringify({ error: "Failed to generate content" })}\n\n`);
       }
 
@@ -231,6 +248,39 @@ export async function registerRoutes(
     }
   });
 
+  // Get document versions
+  app.get("/api/documents/:id/versions", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid document ID" });
+      }
+      const versions = await storage.getDocumentVersions(id);
+      res.json(versions);
+    } catch (error) {
+      console.error("Error getting document versions:", error);
+      res.status(500).json({ error: "Failed to get document versions" });
+    }
+  });
+
+  // Update document (creates version)
+  app.patch("/api/documents/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid document ID" });
+      }
+      const document = await storage.updateDocument(id, req.body);
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+      res.json(document);
+    } catch (error) {
+      console.error("Error updating document:", error);
+      res.status(500).json({ error: "Failed to update document" });
+    }
+  });
+
   // Execute individual agent
   app.post("/api/agents/execute", async (req: Request, res: Response) => {
     try {
@@ -244,7 +294,6 @@ export async function registerRoutes(
 
       const { agentType, contextVariables } = parseResult.data;
 
-      // Set up SSE
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
@@ -255,13 +304,13 @@ export async function registerRoutes(
 
       try {
         const stream = await openai.chat.completions.create({
-          model: "gpt-5",
+          model: "gpt-4o",
           messages: [
             { role: "system", content: prompt },
             { role: "user", content: "Generate the specification document based on the provided context. Be thorough and professional." }
           ],
           stream: true,
-          max_completion_tokens: 8192
+          max_tokens: 8192
         });
 
         let fullContent = "";
@@ -274,9 +323,8 @@ export async function registerRoutes(
           }
         }
 
-        // Create a standalone document (no workflow)
         const document = await storage.createDocument({
-          workflowId: "standalone",
+          workflowId: null,
           agentType,
           title: `${outputType} - ${new Date().toLocaleDateString()}`,
           content: fullContent,
@@ -317,6 +365,43 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating constitution:", error);
       res.status(500).json({ error: "Failed to update constitution" });
+    }
+  });
+
+  // Export document
+  app.get("/api/documents/:id/export", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid document ID" });
+      }
+      const document = await storage.getDocument(id);
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      const format = req.query.format || "markdown";
+
+      if (format === "json") {
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Content-Disposition", `attachment; filename="${document.title}.json"`);
+        res.json({
+          title: document.title,
+          content: document.content,
+          outputType: document.outputType,
+          agentType: document.agentType,
+          version: document.version,
+          createdAt: document.createdAt,
+          updatedAt: document.updatedAt
+        });
+      } else {
+        res.setHeader("Content-Type", "text/markdown");
+        res.setHeader("Content-Disposition", `attachment; filename="${document.title}.md"`);
+        res.send(`# ${document.title}\n\n${document.content}`);
+      }
+    } catch (error) {
+      console.error("Error exporting document:", error);
+      res.status(500).json({ error: "Failed to export document" });
     }
   });
 

@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { pgTable, text, varchar, timestamp, jsonb, serial, integer, boolean } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { relations } from "drizzle-orm";
 
 // Agent types for the SDDD workflow
 export const agentTypes = [
@@ -58,66 +61,106 @@ export const agents: AgentInfo[] = [
   }
 ];
 
-// Context variable schema for customizing prompts
+// Context variable type
+export interface ContextVariable {
+  key: string;
+  value: string;
+  description?: string;
+}
+
 export const contextVariableSchema = z.object({
   key: z.string(),
   value: z.string(),
   description: z.string().optional()
 });
 
-export type ContextVariable = z.infer<typeof contextVariableSchema>;
-
-// Workflow document schema
-export const documentSchema = z.object({
-  id: z.string(),
-  workflowId: z.string(),
-  agentType: z.enum(agentTypes),
-  title: z.string(),
-  content: z.string(),
-  outputType: z.string(),
-  createdAt: z.string(),
-  updatedAt: z.string()
+// Drizzle table definitions
+export const workflows = pgTable("workflows", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  status: varchar("status", { length: 50 }).notNull().default("draft"),
+  currentAgent: varchar("current_agent", { length: 50 }),
+  contextVariables: jsonb("context_variables").$type<ContextVariable[]>().default([]),
+  constitutionContent: text("constitution_content"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull()
 });
 
-export type Document = z.infer<typeof documentSchema>;
-
-export const insertDocumentSchema = documentSchema.omit({ id: true, createdAt: true, updatedAt: true });
-export type InsertDocument = z.infer<typeof insertDocumentSchema>;
-
-// Workflow execution schema
-export const workflowSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string().optional(),
-  status: z.enum(["draft", "in_progress", "completed", "error"]),
-  currentAgent: z.enum(agentTypes).optional(),
-  contextVariables: z.array(contextVariableSchema),
-  constitutionContent: z.string().optional(),
-  createdAt: z.string(),
-  updatedAt: z.string()
+export const documents = pgTable("documents", {
+  id: serial("id").primaryKey(),
+  workflowId: integer("workflow_id").references(() => workflows.id, { onDelete: "cascade" }),
+  agentType: varchar("agent_type", { length: 50 }).notNull(),
+  title: varchar("title", { length: 500 }).notNull(),
+  content: text("content").notNull(),
+  outputType: varchar("output_type", { length: 100 }).notNull(),
+  version: integer("version").default(1),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull()
 });
 
-export type Workflow = z.infer<typeof workflowSchema>;
+export const documentVersions = pgTable("document_versions", {
+  id: serial("id").primaryKey(),
+  documentId: integer("document_id").references(() => documents.id, { onDelete: "cascade" }).notNull(),
+  version: integer("version").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull()
+});
 
-export const insertWorkflowSchema = workflowSchema.omit({ id: true, createdAt: true, updatedAt: true });
+export const settings = pgTable("settings", {
+  id: serial("id").primaryKey(),
+  key: varchar("key", { length: 100 }).notNull().unique(),
+  value: text("value"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull()
+});
+
+// Relations
+export const workflowsRelations = relations(workflows, ({ many }) => ({
+  documents: many(documents)
+}));
+
+export const documentsRelations = relations(documents, ({ one, many }) => ({
+  workflow: one(workflows, {
+    fields: [documents.workflowId],
+    references: [workflows.id]
+  }),
+  versions: many(documentVersions)
+}));
+
+export const documentVersionsRelations = relations(documentVersions, ({ one }) => ({
+  document: one(documents, {
+    fields: [documentVersions.documentId],
+    references: [documents.id]
+  })
+}));
+
+// Insert schemas
+export const insertWorkflowSchema = createInsertSchema(workflows).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertDocumentSchema = createInsertSchema(documents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertDocumentVersionSchema = createInsertSchema(documentVersions).omit({
+  id: true,
+  createdAt: true
+});
+
+// Types
+export type Workflow = typeof workflows.$inferSelect;
 export type InsertWorkflow = z.infer<typeof insertWorkflowSchema>;
+export type Document = typeof documents.$inferSelect;
+export type InsertDocument = z.infer<typeof insertDocumentSchema>;
+export type DocumentVersion = typeof documentVersions.$inferSelect;
+export type InsertDocumentVersion = z.infer<typeof insertDocumentVersionSchema>;
 
-// Prompt template schema
-export const promptTemplateSchema = z.object({
-  id: z.string(),
-  agentType: z.enum(agentTypes),
-  name: z.string(),
-  content: z.string(),
-  isDefault: z.boolean(),
-  createdAt: z.string()
-});
-
-export type PromptTemplate = z.infer<typeof promptTemplateSchema>;
-
-export const insertPromptTemplateSchema = promptTemplateSchema.omit({ id: true, createdAt: true });
-export type InsertPromptTemplate = z.infer<typeof insertPromptTemplateSchema>;
-
-// Execution step for workflow progress
+// Execution step schema (not persisted, runtime only)
 export const executionStepSchema = z.object({
   id: z.string(),
   workflowId: z.string(),
@@ -176,26 +219,3 @@ export const defaultContextVariables: Record<AgentType, ContextVariable[]> = {
     { key: "tech_stack", value: "", description: "Technology stack to use" }
   ]
 };
-
-// User schema (kept for compatibility)
-export const users = {
-  id: "",
-  username: "",
-  password: ""
-};
-
-export interface User {
-  id: string;
-  username: string;
-  password: string;
-}
-
-export interface InsertUser {
-  username: string;
-  password: string;
-}
-
-export const insertUserSchema = z.object({
-  username: z.string(),
-  password: z.string()
-});

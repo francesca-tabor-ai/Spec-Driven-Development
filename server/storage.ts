@@ -1,32 +1,40 @@
-import { randomUUID } from "crypto";
-import type {
-  Workflow,
-  InsertWorkflow,
-  Document,
-  InsertDocument,
-  PromptTemplate,
-  InsertPromptTemplate,
-  ContextVariable,
-  AgentType,
-  defaultContextVariables
+import {
+  workflows,
+  documents,
+  documentVersions,
+  settings,
+  type Workflow,
+  type InsertWorkflow,
+  type Document,
+  type InsertDocument,
+  type DocumentVersion,
+  type InsertDocumentVersion,
+  type ContextVariable,
+  type AgentType
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Workflows
-  getWorkflow(id: string): Promise<Workflow | undefined>;
+  getWorkflow(id: number): Promise<Workflow | undefined>;
   getAllWorkflows(): Promise<Workflow[]>;
   createWorkflow(workflow: InsertWorkflow): Promise<Workflow>;
-  updateWorkflow(id: string, updates: Partial<Workflow>): Promise<Workflow | undefined>;
-  deleteWorkflow(id: string): Promise<void>;
-  duplicateWorkflow(id: string): Promise<Workflow | undefined>;
+  updateWorkflow(id: number, updates: Partial<InsertWorkflow>): Promise<Workflow | undefined>;
+  deleteWorkflow(id: number): Promise<void>;
+  duplicateWorkflow(id: number): Promise<Workflow | undefined>;
 
   // Documents
-  getDocument(id: string): Promise<Document | undefined>;
-  getDocumentsByWorkflow(workflowId: string): Promise<Document[]>;
+  getDocument(id: number): Promise<Document | undefined>;
+  getDocumentsByWorkflow(workflowId: number): Promise<Document[]>;
   getDocumentsByAgent(agentType: AgentType): Promise<Document[]>;
   createDocument(doc: InsertDocument): Promise<Document>;
-  updateDocument(id: string, updates: Partial<Document>): Promise<Document | undefined>;
-  deleteDocument(id: string): Promise<void>;
+  updateDocument(id: number, updates: Partial<InsertDocument>): Promise<Document | undefined>;
+  deleteDocument(id: number): Promise<void>;
+
+  // Document versions
+  getDocumentVersions(documentId: number): Promise<DocumentVersion[]>;
+  createDocumentVersion(version: InsertDocumentVersion): Promise<DocumentVersion>;
 
   // Constitution
   getConstitution(): Promise<string>;
@@ -36,152 +44,155 @@ export interface IStorage {
   getStats(): Promise<{ totalWorkflows: number; completedWorkflows: number; documentsGenerated: number }>;
 }
 
-export class MemStorage implements IStorage {
-  private workflows: Map<string, Workflow>;
-  private documents: Map<string, Document>;
-  private constitution: string;
-
-  constructor() {
-    this.workflows = new Map();
-    this.documents = new Map();
-    this.constitution = "";
-  }
-
+export class DatabaseStorage implements IStorage {
   // Workflows
-  async getWorkflow(id: string): Promise<Workflow | undefined> {
-    return this.workflows.get(id);
+  async getWorkflow(id: number): Promise<Workflow | undefined> {
+    const [workflow] = await db.select().from(workflows).where(eq(workflows.id, id));
+    return workflow || undefined;
   }
 
   async getAllWorkflows(): Promise<Workflow[]> {
-    return Array.from(this.workflows.values()).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    return db.select().from(workflows).orderBy(desc(workflows.createdAt));
   }
 
   async createWorkflow(data: InsertWorkflow): Promise<Workflow> {
-    const id = randomUUID();
-    const now = new Date().toISOString();
-    const workflow: Workflow = {
-      id,
+    const [workflow] = await db.insert(workflows).values({
       name: data.name,
       description: data.description,
       status: data.status || "draft",
       currentAgent: data.currentAgent,
       contextVariables: data.contextVariables || [],
-      constitutionContent: data.constitutionContent,
-      createdAt: now,
-      updatedAt: now
-    };
-    this.workflows.set(id, workflow);
+      constitutionContent: data.constitutionContent
+    }).returning();
     return workflow;
   }
 
-  async updateWorkflow(id: string, updates: Partial<Workflow>): Promise<Workflow | undefined> {
-    const workflow = this.workflows.get(id);
-    if (!workflow) return undefined;
-
-    const updated: Workflow = {
-      ...workflow,
-      ...updates,
-      updatedAt: new Date().toISOString()
-    };
-    this.workflows.set(id, updated);
-    return updated;
+  async updateWorkflow(id: number, updates: Partial<InsertWorkflow>): Promise<Workflow | undefined> {
+    const [workflow] = await db.update(workflows)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(workflows.id, id))
+      .returning();
+    return workflow || undefined;
   }
 
-  async deleteWorkflow(id: string): Promise<void> {
-    this.workflows.delete(id);
-    // Delete associated documents
-    for (const [docId, doc] of this.documents) {
-      if (doc.workflowId === id) {
-        this.documents.delete(docId);
-      }
-    }
+  async deleteWorkflow(id: number): Promise<void> {
+    await db.delete(workflows).where(eq(workflows.id, id));
   }
 
-  async duplicateWorkflow(id: string): Promise<Workflow | undefined> {
-    const workflow = this.workflows.get(id);
-    if (!workflow) return undefined;
+  async duplicateWorkflow(id: number): Promise<Workflow | undefined> {
+    const original = await this.getWorkflow(id);
+    if (!original) return undefined;
 
     return this.createWorkflow({
-      name: `${workflow.name} (Copy)`,
-      description: workflow.description,
+      name: `${original.name} (Copy)`,
+      description: original.description,
       status: "draft",
-      currentAgent: workflow.currentAgent,
-      contextVariables: [...workflow.contextVariables],
-      constitutionContent: workflow.constitutionContent
+      currentAgent: original.currentAgent,
+      contextVariables: [...(original.contextVariables || [])],
+      constitutionContent: original.constitutionContent
     });
   }
 
   // Documents
-  async getDocument(id: string): Promise<Document | undefined> {
-    return this.documents.get(id);
+  async getDocument(id: number): Promise<Document | undefined> {
+    const [document] = await db.select().from(documents).where(eq(documents.id, id));
+    return document || undefined;
   }
 
-  async getDocumentsByWorkflow(workflowId: string): Promise<Document[]> {
-    return Array.from(this.documents.values())
-      .filter(doc => doc.workflowId === workflowId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  async getDocumentsByWorkflow(workflowId: number): Promise<Document[]> {
+    return db.select().from(documents)
+      .where(eq(documents.workflowId, workflowId))
+      .orderBy(desc(documents.createdAt));
   }
 
   async getDocumentsByAgent(agentType: AgentType): Promise<Document[]> {
-    return Array.from(this.documents.values())
-      .filter(doc => doc.agentType === agentType)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return db.select().from(documents)
+      .where(eq(documents.agentType, agentType))
+      .orderBy(desc(documents.createdAt));
   }
 
   async createDocument(data: InsertDocument): Promise<Document> {
-    const id = randomUUID();
-    const now = new Date().toISOString();
-    const document: Document = {
-      id,
+    const [document] = await db.insert(documents).values({
       workflowId: data.workflowId,
       agentType: data.agentType,
       title: data.title,
       content: data.content,
       outputType: data.outputType,
-      createdAt: now,
-      updatedAt: now
-    };
-    this.documents.set(id, document);
+      version: 1
+    }).returning();
     return document;
   }
 
-  async updateDocument(id: string, updates: Partial<Document>): Promise<Document | undefined> {
-    const document = this.documents.get(id);
-    if (!document) return undefined;
+  async updateDocument(id: number, updates: Partial<InsertDocument>): Promise<Document | undefined> {
+    // Get current document for versioning
+    const current = await this.getDocument(id);
+    if (!current) return undefined;
 
-    const updated: Document = {
-      ...document,
-      ...updates,
-      updatedAt: new Date().toISOString()
-    };
-    this.documents.set(id, updated);
-    return updated;
+    // Save previous version
+    await this.createDocumentVersion({
+      documentId: id,
+      version: current.version || 1,
+      content: current.content
+    });
+
+    // Update document with incremented version
+    const [document] = await db.update(documents)
+      .set({
+        ...updates,
+        version: (current.version || 1) + 1,
+        updatedAt: new Date()
+      })
+      .where(eq(documents.id, id))
+      .returning();
+    return document || undefined;
   }
 
-  async deleteDocument(id: string): Promise<void> {
-    this.documents.delete(id);
+  async deleteDocument(id: number): Promise<void> {
+    await db.delete(documents).where(eq(documents.id, id));
+  }
+
+  // Document versions
+  async getDocumentVersions(documentId: number): Promise<DocumentVersion[]> {
+    return db.select().from(documentVersions)
+      .where(eq(documentVersions.documentId, documentId))
+      .orderBy(desc(documentVersions.version));
+  }
+
+  async createDocumentVersion(data: InsertDocumentVersion): Promise<DocumentVersion> {
+    const [version] = await db.insert(documentVersions).values({
+      documentId: data.documentId,
+      version: data.version,
+      content: data.content
+    }).returning();
+    return version;
   }
 
   // Constitution
   async getConstitution(): Promise<string> {
-    return this.constitution;
+    const [setting] = await db.select().from(settings).where(eq(settings.key, "constitution"));
+    return setting?.value || "";
   }
 
   async setConstitution(content: string): Promise<void> {
-    this.constitution = content;
+    await db.insert(settings)
+      .values({ key: "constitution", value: content })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value: content, updatedAt: new Date() }
+      });
   }
 
   // Stats
   async getStats(): Promise<{ totalWorkflows: number; completedWorkflows: number; documentsGenerated: number }> {
-    const workflows = Array.from(this.workflows.values());
+    const allWorkflows = await db.select().from(workflows);
+    const allDocuments = await db.select().from(documents);
+
     return {
-      totalWorkflows: workflows.length,
-      completedWorkflows: workflows.filter(w => w.status === "completed").length,
-      documentsGenerated: this.documents.size
+      totalWorkflows: allWorkflows.length,
+      completedWorkflows: allWorkflows.filter(w => w.status === "completed").length,
+      documentsGenerated: allDocuments.length
     };
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
