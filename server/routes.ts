@@ -31,8 +31,10 @@ import {
 
 const createWorkflowBodySchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
-  description: z.string().max(500).optional(),
-  startingAgent: z.enum(agentTypes).optional()
+  description: z.string().max(5000).optional(),
+  startingAgent: z.enum(agentTypes).optional(),
+  contextVariables: z.array(contextVariableSchema).optional(),
+  uploadedContent: z.string().optional()
 });
 
 const executeAgentBodySchema = z.object({
@@ -98,13 +100,25 @@ export async function registerRoutes(
         });
       }
 
-      const { name, description, startingAgent } = parseResult.data;
+      const { name, description, startingAgent, contextVariables: providedContextVars, uploadedContent } = parseResult.data;
       const agentType = startingAgent || "analyst";
-      const contextVariables = [...(defaultContextVariables[agentType] || [])];
+      
+      // Use provided context variables or defaults
+      const contextVariables = providedContextVars && providedContextVars.length > 0 
+        ? providedContextVars 
+        : [...(defaultContextVariables[agentType] || [])];
+
+      // Combine description with uploaded content if present
+      let fullDescription = description || "";
+      if (uploadedContent) {
+        fullDescription = fullDescription 
+          ? `${fullDescription}\n\n--- Uploaded Content ---\n${uploadedContent}`
+          : uploadedContent;
+      }
 
       const workflow = await storage.createWorkflow({
         name,
-        description,
+        description: fullDescription,
         status: "draft",
         currentAgent: agentType,
         contextVariables

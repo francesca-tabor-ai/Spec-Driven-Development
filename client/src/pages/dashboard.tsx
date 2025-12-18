@@ -19,7 +19,7 @@ import { AgentCard } from "@/components/agent-card";
 import { WorkflowCard, WorkflowCardSkeleton } from "@/components/workflow-card";
 import { NewWorkflowDialog } from "@/components/new-workflow-dialog";
 import { FileUpload } from "@/components/file-upload";
-import { agents, type Workflow, type AgentType } from "@shared/schema";
+import { agents, type Workflow, type AgentType, type ContextVariable } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -40,7 +40,13 @@ export default function Dashboard() {
   });
 
   const createWorkflowMutation = useMutation({
-    mutationFn: async (data: { name: string; description?: string; startingAgent: AgentType }) => {
+    mutationFn: async (data: { 
+      name: string; 
+      description?: string; 
+      startingAgent: AgentType;
+      contextVariables?: ContextVariable[];
+      uploadedContent?: string;
+    }) => {
       const res = await apiRequest("POST", "/api/workflows", data);
       return res.json();
     },
