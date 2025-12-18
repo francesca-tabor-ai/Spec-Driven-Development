@@ -191,7 +191,7 @@ export async function registerRoutes(
     }
   });
 
-  // Execute workflow
+  // Execute workflow - runs all 5 agents sequentially
   app.post("/api/workflows/:id/execute", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
@@ -212,50 +212,66 @@ export async function registerRoutes(
 
       await storage.updateWorkflow(id, { status: "in_progress" });
 
-      const agentType = (workflow.currentAgent || "analyst") as AgentType;
-      const prompt = getPromptForAgent(agentType, contextVariables, constitution);
-      const outputType = getOutputTypeForAgent(agentType);
+      const agentSequence: AgentType[] = ["decision_author", "analyst", "architect", "scrum_master", "developer"];
+      const generatedDocuments: any[] = [];
+      let hasError = false;
 
-      res.write(`data: ${JSON.stringify({ stepIndex: 0 })}\n\n`);
+      for (let stepIndex = 0; stepIndex < agentSequence.length; stepIndex++) {
+        if (hasError) break;
+        
+        const agentType = agentSequence[stepIndex];
+        const prompt = getPromptForAgent(agentType, contextVariables, constitution, generatedDocuments);
+        const outputType = getOutputTypeForAgent(agentType);
 
-      try {
-        const stream = await openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: [
-            { role: "system", content: prompt },
-            { role: "user", content: "Generate the specification document based on the provided context. Be thorough and professional." }
-          ],
-          stream: true,
-          max_tokens: 8192
-        });
+        res.write(`data: ${JSON.stringify({ stepIndex, agentType, agentStarted: true })}\n\n`);
 
-        let fullContent = "";
+        try {
+          const stream = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+              { role: "system", content: prompt },
+              { role: "user", content: `Generate the ${outputType} based on the provided context and any previous agent outputs. Be thorough and professional.` }
+            ],
+            stream: true,
+            max_tokens: 8192
+          });
 
-        for await (const chunk of stream) {
-          const content = chunk.choices[0]?.delta?.content || "";
-          if (content) {
-            fullContent += content;
-            res.write(`data: ${JSON.stringify({ content })}\n\n`);
+          let fullContent = "";
+
+          for await (const chunk of stream) {
+            const content = chunk.choices[0]?.delta?.content || "";
+            if (content) {
+              fullContent += content;
+              res.write(`data: ${JSON.stringify({ stepIndex, content })}\n\n`);
+            }
           }
+
+          const document = await storage.createDocument({
+            workflowId: id,
+            agentType,
+            title: `${outputType} - ${new Date().toLocaleDateString()}`,
+            content: fullContent,
+            outputType
+          });
+
+          generatedDocuments.push({ agentType, outputType, content: fullContent });
+          
+          await storage.updateWorkflow(id, { currentAgent: agentType });
+
+          res.write(`data: ${JSON.stringify({ stepIndex, stepComplete: true, document })}\n\n`);
+        } catch (error) {
+          console.error(`OpenAI error for agent ${agentType}:`, error);
+          hasError = true;
+          await storage.updateWorkflow(id, { status: "error" });
+          res.write(`data: ${JSON.stringify({ stepIndex, error: `Failed to generate content for ${agentType}` })}\n\n`);
         }
-
-        const document = await storage.createDocument({
-          workflowId: id,
-          agentType,
-          title: `${outputType} - ${new Date().toLocaleDateString()}`,
-          content: fullContent,
-          outputType
-        });
-
-        await storage.updateWorkflow(id, { status: "completed" });
-
-        res.write(`data: ${JSON.stringify({ done: true, document })}\n\n`);
-      } catch (error) {
-        console.error("OpenAI error:", error);
-        await storage.updateWorkflow(id, { status: "error" });
-        res.write(`data: ${JSON.stringify({ error: "Failed to generate content" })}\n\n`);
       }
 
+      if (!hasError) {
+        await storage.updateWorkflow(id, { status: "completed" });
+      }
+
+      res.write(`data: ${JSON.stringify({ done: true, totalDocuments: generatedDocuments.length })}\n\n`);
       res.end();
     } catch (error) {
       console.error("Error executing workflow:", error);

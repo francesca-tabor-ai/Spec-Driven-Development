@@ -66,12 +66,32 @@ export default function WorkflowDetailPage() {
     }
   });
 
-  const steps: ExecutionStep[] = agents.map((agent, index) => ({
-    id: `step-${index}`,
-    workflowId: workflowId || "",
-    agentType: agent.id,
-    status: index < currentStepIndex ? "completed" : index === currentStepIndex && isExecuting ? "running" : "pending"
-  }));
+  const agentsWithDocuments = new Set(documents?.map(d => d.agentType) || []);
+  
+  const steps: ExecutionStep[] = agents.map((agent, index) => {
+    let status: "pending" | "running" | "completed" = "pending";
+    
+    if (isExecuting) {
+      if (index < currentStepIndex) {
+        status = "completed";
+      } else if (index === currentStepIndex) {
+        status = "running";
+      }
+    } else {
+      if (agentsWithDocuments.has(agent.id)) {
+        status = "completed";
+      }
+    }
+    
+    return {
+      id: `step-${index}`,
+      workflowId: workflowId || "",
+      agentType: agent.id,
+      status
+    };
+  });
+
+  const [currentAgentName, setCurrentAgentName] = useState<string>("");
 
   const executeWorkflow = async () => {
     if (!workflow) return;
@@ -79,6 +99,7 @@ export default function WorkflowDetailPage() {
     setIsExecuting(true);
     setStreamingContent("");
     setCurrentStepIndex(0);
+    setCurrentAgentName("");
     abortControllerRef.current = new AbortController();
 
     try {
@@ -102,7 +123,7 @@ export default function WorkflowDetailPage() {
         throw new Error("No response body");
       }
 
-      let fullContent = "";
+      let currentAgentContent = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -115,17 +136,33 @@ export default function WorkflowDetailPage() {
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
-              if (data.content) {
-                fullContent += data.content;
-                setStreamingContent(fullContent);
+              
+              if (data.agentStarted) {
+                currentAgentContent = "";
+                setStreamingContent("");
+                const agentInfo = agents.find(a => a.id === data.agentType);
+                setCurrentAgentName(agentInfo?.name || data.agentType);
               }
+              
+              if (data.content) {
+                currentAgentContent += data.content;
+                setStreamingContent(currentAgentContent);
+              }
+              
               if (data.stepIndex !== undefined) {
                 setCurrentStepIndex(data.stepIndex);
               }
+              
+              if (data.stepComplete) {
+                queryClient.invalidateQueries({ queryKey: ["/api/workflows", workflowId, "documents"] });
+              }
+              
               if (data.done) {
                 queryClient.invalidateQueries({ queryKey: ["/api/workflows", workflowId] });
                 queryClient.invalidateQueries({ queryKey: ["/api/workflows", workflowId, "documents"] });
+                setStreamingContent("");
               }
+              
               if (data.document) {
                 setSelectedDocument(data.document);
               }
@@ -138,7 +175,7 @@ export default function WorkflowDetailPage() {
 
       toast({
         title: "Specification completed",
-        description: "All agents have finished execution."
+        description: "All 5 agents have finished execution."
       });
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
@@ -150,6 +187,7 @@ export default function WorkflowDetailPage() {
       }
     } finally {
       setIsExecuting(false);
+      setCurrentAgentName("");
     }
   };
 
@@ -518,26 +556,32 @@ export default function WorkflowDetailPage() {
         </div>
 
         <div className="flex-1 overflow-hidden">
-          {streamingContent ? (
+          {streamingContent || isExecuting ? (
             <div className="h-full flex flex-col">
               <div className="p-4 border-b flex items-center gap-3">
                 <FileText className="h-5 w-5 text-muted-foreground" />
                 <span className="font-medium text-sm">
-                  {isExecuting ? "Generating..." : "Output"}
+                  {isExecuting ? (currentAgentName ? `Generating: ${currentAgentName}` : "Starting...") : "Output"}
                 </span>
                 {isExecuting && (
                   <Badge variant="default">
                     <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                    Streaming
+                    Agent {currentStepIndex + 1}/5
                   </Badge>
                 )}
               </div>
               <ScrollArea className="flex-1">
                 <div className="p-6 max-w-4xl mx-auto">
-                  <pre className="whitespace-pre-wrap font-mono text-sm bg-muted p-6 rounded-lg" data-testid="content-streaming">
-                    {streamingContent}
-                    {isExecuting && <span className="animate-pulse">|</span>}
-                  </pre>
+                  {streamingContent ? (
+                    <pre className="whitespace-pre-wrap font-mono text-sm bg-muted p-6 rounded-lg" data-testid="content-streaming">
+                      {streamingContent}
+                      {isExecuting && <span className="animate-pulse">|</span>}
+                    </pre>
+                  ) : (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
                 </div>
               </ScrollArea>
             </div>

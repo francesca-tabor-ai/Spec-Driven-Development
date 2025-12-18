@@ -315,7 +315,18 @@ Required Outputs:
 - README updates if introducing new components`
 };
 
-export function getPromptForAgent(agentType: AgentType, variables: ContextVariable[], constitution?: string): string {
+interface PreviousDocument {
+  agentType: string;
+  outputType: string;
+  content: string;
+}
+
+export function getPromptForAgent(
+  agentType: AgentType, 
+  variables: ContextVariable[], 
+  constitution?: string,
+  previousDocuments?: PreviousDocument[]
+): string {
   let prompt = PROMPTS[agentType];
 
   // Replace variables in the prompt
@@ -328,6 +339,14 @@ export function getPromptForAgent(agentType: AgentType, variables: ContextVariab
   if (constitution) {
     prompt = prompt.replace(/\{\{constitution_file\}\}/g, "the project constitution");
     prompt = `${prompt}\n\n---\nProject Constitution:\n${constitution}`;
+  }
+
+  // Add context from previous agent outputs
+  if (previousDocuments && previousDocuments.length > 0) {
+    prompt += "\n\n---\nPrevious Agent Outputs (use these as input for your work):\n";
+    for (const doc of previousDocuments) {
+      prompt += `\n### ${doc.outputType} (from ${doc.agentType} agent):\n${doc.content}\n`;
+    }
   }
 
   return prompt;
