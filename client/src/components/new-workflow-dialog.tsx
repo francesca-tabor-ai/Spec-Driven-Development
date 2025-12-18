@@ -166,10 +166,10 @@ export function NewWorkflowDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Wand2 className="h-5 w-5" />
-            Create New Workflow
+            Create New Specification
           </DialogTitle>
           <DialogDescription>
-            Configure your Spec-Driven Development workflow with context variables and optional file uploads.
+            Configure your specification with context variables and optional file uploads.
           </DialogDescription>
         </DialogHeader>
 
@@ -354,7 +354,7 @@ export function NewWorkflowDialog({
                   ) : (
                     <>
                       <Plus className="h-4 w-4 mr-1.5" />
-                      Create Workflow
+                      Create Specification
                     </>
                   )}
                 </Button>

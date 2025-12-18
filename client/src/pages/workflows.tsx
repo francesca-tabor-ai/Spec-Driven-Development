@@ -37,8 +37,8 @@ export default function WorkflowsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/workflows"] });
       setShowNewWorkflow(false);
       toast({
-        title: "Workflow created",
-        description: "Your new workflow is ready to use."
+        title: "Specification created",
+        description: "Your new specification is ready to use."
       });
     }
   });
@@ -50,8 +50,8 @@ export default function WorkflowsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/workflows"] });
       toast({
-        title: "Workflow deleted",
-        description: "The workflow has been removed."
+        title: "Specification deleted",
+        description: "The specification has been removed."
       });
     }
   });
@@ -64,8 +64,8 @@ export default function WorkflowsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/workflows"] });
       toast({
-        title: "Workflow duplicated",
-        description: "A copy of the workflow has been created."
+        title: "Specification duplicated",
+        description: "A copy of the specification has been created."
       });
     }
   });
@@ -91,14 +91,14 @@ export default function WorkflowsPage() {
       <div className="p-6 pb-0">
         <div className="flex items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-semibold" data-testid="text-page-title">Workflows</h1>
+            <h1 className="text-2xl font-semibold" data-testid="text-page-title">Specifications</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Manage your spec-driven development workflows
+              Manage your spec-driven development specifications
             </p>
           </div>
           <Button onClick={() => setShowNewWorkflow(true)} data-testid="button-new-workflow">
             <Plus className="h-4 w-4 mr-1.5" />
-            New Workflow
+            New Specification
           </Button>
         </div>
 
@@ -106,7 +106,7 @@ export default function WorkflowsPage() {
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search workflows..."
+              placeholder="Search specifications..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"

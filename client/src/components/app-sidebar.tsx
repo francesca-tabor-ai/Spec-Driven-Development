@@ -39,7 +39,7 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { title: "Dashboard", url: "/", icon: Home },
-  { title: "Workflows", url: "/workflows", icon: FolderOpen },
+  { title: "Specifications", url: "/workflows", icon: FolderOpen },
   { title: "Constitution", url: "/constitution", icon: ScrollText },
   { title: "Decision Framework", url: "/decision-framework", icon: HelpCircle }
 ];
@@ -134,7 +134,7 @@ export function AppSidebar({ onNewWorkflow }: AppSidebarProps) {
           data-testid="button-new-workflow"
         >
           <Plus className="h-4 w-4 mr-2" />
-          New Workflow
+          New Specification
         </Button>
       </SidebarFooter>
     </Sidebar>

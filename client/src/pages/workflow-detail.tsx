@@ -137,14 +137,14 @@ export default function WorkflowDetailPage() {
       }
 
       toast({
-        title: "Workflow completed",
+        title: "Specification completed",
         description: "All agents have finished execution."
       });
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
         toast({
           title: "Execution failed",
-          description: "Failed to execute workflow. Please try again.",
+          description: "Failed to execute specification. Please try again.",
           variant: "destructive"
         });
       }
@@ -196,7 +196,7 @@ export default function WorkflowDetailPage() {
     if (!workflow || !documents || documents.length === 0) {
       toast({
         title: "Nothing to export",
-        description: "Execute the workflow first to generate documents.",
+        description: "Execute the specification first to generate documents.",
         variant: "destructive"
       });
       return;
@@ -303,7 +303,7 @@ export default function WorkflowDetailPage() {
 
     toast({
       title: "Export complete",
-      description: `Workflow exported as ${format.toUpperCase()}`
+      description: `Specification exported as ${format.toUpperCase()}`
     });
   };
 
@@ -311,8 +311,8 @@ export default function WorkflowDetailPage() {
     updateWorkflowMutation.mutate({}, {
       onSuccess: () => {
         toast({
-          title: "Workflow saved",
-          description: "Your workflow has been saved."
+          title: "Specification saved",
+          description: "Your specification has been saved."
         });
       }
     });
@@ -334,12 +334,12 @@ export default function WorkflowDetailPage() {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-lg font-medium mb-2">Workflow Not Found</h2>
-          <p className="text-sm text-muted-foreground mb-4">The requested workflow does not exist.</p>
+          <h2 className="text-lg font-medium mb-2">Specification Not Found</h2>
+          <p className="text-sm text-muted-foreground mb-4">The requested specification does not exist.</p>
           <Link href="/workflows">
             <Button>
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Workflows
+              Back to Specifications
             </Button>
           </Link>
         </div>
@@ -403,7 +403,7 @@ export default function WorkflowDetailPage() {
             </SheetTrigger>
             <SheetContent className="w-[400px] sm:w-[540px]">
               <SheetHeader>
-                <SheetTitle>Workflow Settings</SheetTitle>
+                <SheetTitle>Specification Settings</SheetTitle>
               </SheetHeader>
               <div className="mt-6">
                 <ContextVariablesEditor
@@ -510,7 +510,7 @@ export default function WorkflowDetailPage() {
                 })
               ) : (
                 <div className="p-4 text-center text-sm text-muted-foreground">
-                  No documents yet. Execute the workflow to generate specifications.
+                  No documents yet. Execute the specification to generate outputs.
                 </div>
               )}
             </div>
@@ -569,11 +569,11 @@ export default function WorkflowDetailPage() {
                 </div>
                 <h3 className="font-medium mb-2">Ready to Execute</h3>
                 <p className="text-sm text-muted-foreground mb-6">
-                  Click "Execute" to run the workflow and generate specifications across all agents.
+                  Click "Execute" to run the specification and generate documents across all agents.
                 </p>
                 <Button onClick={executeWorkflow} data-testid="button-execute-empty">
                   <Play className="h-4 w-4 mr-2" />
-                  Execute Workflow
+                  Execute Specification
                 </Button>
               </div>
             </div>

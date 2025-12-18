@@ -55,8 +55,8 @@ export default function Dashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       setShowNewWorkflow(false);
       toast({
-        title: "Workflow created",
-        description: "Your new workflow is ready to use."
+        title: "Specification created",
+        description: "Your new specification is ready to use."
       });
     },
     onError: () => {
@@ -76,8 +76,8 @@ export default function Dashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/workflows"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({
-        title: "Workflow deleted",
-        description: "The workflow has been removed."
+        title: "Specification deleted",
+        description: "The specification has been removed."
       });
     }
   });
@@ -98,7 +98,7 @@ export default function Dashboard() {
             <FileUpload />
             <Button onClick={() => setShowNewWorkflow(true)} data-testid="button-new-workflow-header">
               <Plus className="h-4 w-4 mr-1.5" />
-              New Workflow
+              New Specification
             </Button>
           </div>
         </div>
@@ -114,7 +114,7 @@ export default function Dashboard() {
                   <div className="text-2xl font-semibold" data-testid="stat-total-workflows">
                     {statsLoading ? <Skeleton className="h-8 w-12" /> : stats?.totalWorkflows || 0}
                   </div>
-                  <span className="text-xs text-muted-foreground">Total Workflows</span>
+                  <span className="text-xs text-muted-foreground">Total Specifications</span>
                 </div>
               </div>
             </CardContent>
@@ -187,7 +187,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-muted-foreground" />
-              <h2 className="text-lg font-medium">Recent Workflows</h2>
+              <h2 className="text-lg font-medium">Recent Specifications</h2>
             </div>
             <Link href="/workflows">
               <Button variant="ghost" size="sm">
