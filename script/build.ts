@@ -2,6 +2,14 @@ import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile } from "fs/promises";
 
+// Banner to inject __dirname and __filename shims for CJS output
+const cjsShim = `
+const { createRequire } = require('module');
+const { fileURLToPath } = require('url');
+const __filename = typeof __filename !== 'undefined' ? __filename : '';
+const __dirname = typeof __dirname !== 'undefined' ? __dirname : require('path').dirname(__filename);
+`;
+
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
 const allowlist = [
@@ -56,6 +64,9 @@ async function buildAll() {
     bundle: true,
     format: "cjs",
     outfile: "dist/index.cjs",
+    banner: {
+      js: cjsShim,
+    },
     define: {
       "process.env.NODE_ENV": '"production"',
     },
