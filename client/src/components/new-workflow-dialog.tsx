@@ -124,8 +124,12 @@ export function NewWorkflowDialog({
 
       if (response.ok) {
         const data = await response.json();
-        setUploadedFile({ name: data.fileName, content: data.content });
-        form.setValue("uploadedContent", data.content);
+        setUploadedFile({ name: data.fileName, content: data.textContent });
+        form.setValue("uploadedContent", data.textContent);
+        toast({
+          title: "File uploaded",
+          description: `Extracted ${data.textContent.length.toLocaleString()} characters from ${data.fileName}`
+        });
       }
     } catch (error) {
       console.error("Upload failed:", error);
