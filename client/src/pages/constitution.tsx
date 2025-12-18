@@ -61,8 +61,8 @@ export default function ConstitutionPage() {
   }
 
   return (
-    <div className="h-full p-6">
-      <div className="h-full max-w-5xl mx-auto">
+    <div className="h-full overflow-auto p-6">
+      <div className="max-w-5xl mx-auto">
         <ConstitutionEditor
           content={content}
           onChange={handleChange}

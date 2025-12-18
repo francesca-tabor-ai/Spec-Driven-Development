@@ -401,16 +401,16 @@ export default function WorkflowDetailPage() {
                 Settings
               </Button>
             </SheetTrigger>
-            <SheetContent className="w-[400px] sm:w-[540px]">
-              <SheetHeader>
+            <SheetContent className="w-[400px] sm:w-[540px] flex flex-col">
+              <SheetHeader className="shrink-0">
                 <SheetTitle>Specification Settings</SheetTitle>
               </SheetHeader>
-              <div className="mt-6">
+              <ScrollArea className="flex-1 mt-6">
                 <ContextVariablesEditor
                   variables={workflow.contextVariables || []}
                   onChange={(vars) => updateWorkflowMutation.mutate({ contextVariables: vars })}
                 />
-              </div>
+              </ScrollArea>
             </SheetContent>
           </Sheet>
           {isExecuting ? (

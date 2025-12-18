@@ -166,8 +166,8 @@ export function NewWorkflowDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Wand2 className="h-5 w-5" />
             Create New Specification
@@ -177,9 +177,10 @@ export function NewWorkflowDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-5">
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
+            <ScrollArea className="flex-1 pr-4">
+              <div className="space-y-5 pb-4">
               <FormField
                 control={form.control}
                 name="name"
@@ -342,30 +343,31 @@ export function NewWorkflowDialog({
                   ))}
                 </CollapsibleContent>
               </Collapsible>
+              </div>
+            </ScrollArea>
 
-              <DialogFooter className="pt-4 gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => handleOpenChange(false)}
-                  disabled={isLoading}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={isLoading} data-testid="button-create-workflow">
-                  {isLoading ? (
-                    <>Creating...</>
-                  ) : (
-                    <>
-                      <Plus className="h-4 w-4 mr-1.5" />
-                      Create Specification
-                    </>
-                  )}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </ScrollArea>
+            <DialogFooter className="flex-shrink-0 pt-4 gap-2 border-t mt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleOpenChange(false)}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isLoading} data-testid="button-create-workflow">
+                {isLoading ? (
+                  <>Creating...</>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Create Specification
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
