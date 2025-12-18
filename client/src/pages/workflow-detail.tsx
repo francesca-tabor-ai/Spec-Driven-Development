@@ -10,7 +10,14 @@ import {
   FileText,
   Loader2,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Download,
+  Save,
+  FileJson,
+  FileCode,
+  File,
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +27,8 @@ import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ContextVariablesEditor } from "@/components/context-variables-editor";
 import { DocumentViewer } from "@/components/document-viewer";
 import { AgentCardCompact } from "@/components/agent-card";
@@ -156,6 +165,159 @@ export default function WorkflowDetailPage() {
     updateWorkflowMutation.mutate({ status: "draft" });
   };
 
+  const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({});
+
+  const toggleAgentSection = (agentType: string, open: boolean) => {
+    setExpandedAgents(prev => ({ ...prev, [agentType]: open }));
+  };
+
+  // Group documents by agent type
+  const documentsByAgent = documents?.reduce((acc, doc) => {
+    const agentType = doc.agentType;
+    if (!acc[agentType]) {
+      acc[agentType] = [];
+    }
+    acc[agentType].push(doc);
+    return acc;
+  }, {} as Record<string, Document[]>) || {};
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = window.document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    window.document.body.appendChild(a);
+    a.click();
+    window.document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportWorkflow = (format: "markdown" | "json" | "html" | "txt") => {
+    if (!workflow || !documents || documents.length === 0) {
+      toast({
+        title: "Nothing to export",
+        description: "Execute the workflow first to generate documents.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const timestamp = new Date().toISOString().split("T")[0];
+    const sanitizedName = workflow.name.replace(/[^a-zA-Z0-9]/g, "_");
+
+    if (format === "json") {
+      const jsonData = {
+        workflow: {
+          id: workflow.id,
+          name: workflow.name,
+          description: workflow.description,
+          status: workflow.status,
+          contextVariables: workflow.contextVariables,
+          createdAt: workflow.createdAt,
+          updatedAt: workflow.updatedAt
+        },
+        documents: documents.map(doc => ({
+          id: doc.id,
+          title: doc.title,
+          agentType: doc.agentType,
+          outputType: doc.outputType,
+          content: doc.content,
+          version: doc.version,
+          createdAt: doc.createdAt
+        }))
+      };
+      const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: "application/json" });
+      downloadBlob(blob, `${sanitizedName}_${timestamp}.json`);
+    } else if (format === "html") {
+      let htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${workflow.name}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; }
+    h1 { border-bottom: 2px solid #333; padding-bottom: 0.5rem; }
+    h2 { color: #555; margin-top: 2rem; }
+    .section { margin-bottom: 3rem; padding: 1.5rem; background: #f9f9f9; border-radius: 8px; }
+    .agent-badge { display: inline-block; padding: 0.25rem 0.75rem; background: #e0e0e0; border-radius: 4px; font-size: 0.85rem; margin-bottom: 1rem; }
+    pre { background: #f0f0f0; padding: 1rem; overflow-x: auto; border-radius: 4px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>${workflow.name}</h1>
+  ${workflow.description ? `<p>${workflow.description}</p>` : ""}
+`;
+      for (const agent of agents) {
+        const agentDocs = documentsByAgent[agent.id];
+        if (agentDocs && agentDocs.length > 0) {
+          htmlContent += `  <h2>${agent.name}</h2>\n`;
+          for (const doc of agentDocs) {
+            htmlContent += `  <div class="section">
+    <div class="agent-badge">${doc.outputType}</div>
+    <h3>${doc.title}</h3>
+    <pre>${doc.content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
+  </div>\n`;
+          }
+        }
+      }
+      htmlContent += `</body>\n</html>`;
+      const blob = new Blob([htmlContent], { type: "text/html" });
+      downloadBlob(blob, `${sanitizedName}_${timestamp}.html`);
+    } else if (format === "txt") {
+      let textContent = `${workflow.name}\n${"=".repeat(workflow.name.length)}\n\n`;
+      if (workflow.description) {
+        textContent += `${workflow.description}\n\n`;
+      }
+      for (const agent of agents) {
+        const agentDocs = documentsByAgent[agent.id];
+        if (agentDocs && agentDocs.length > 0) {
+          textContent += `\n${agent.name}\n${"-".repeat(agent.name.length)}\n\n`;
+          for (const doc of agentDocs) {
+            textContent += `[${doc.outputType}] ${doc.title}\n\n${doc.content}\n\n`;
+          }
+        }
+      }
+      const blob = new Blob([textContent], { type: "text/plain" });
+      downloadBlob(blob, `${sanitizedName}_${timestamp}.txt`);
+    } else {
+      let markdownContent = `# ${workflow.name}\n\n`;
+      if (workflow.description) {
+        markdownContent += `${workflow.description}\n\n`;
+      }
+      markdownContent += `---\n\n`;
+      for (const agent of agents) {
+        const agentDocs = documentsByAgent[agent.id];
+        if (agentDocs && agentDocs.length > 0) {
+          markdownContent += `## ${agent.name}\n\n`;
+          for (const doc of agentDocs) {
+            markdownContent += `### ${doc.title}\n\n`;
+            markdownContent += `**Type:** ${doc.outputType}\n\n`;
+            markdownContent += `${doc.content}\n\n---\n\n`;
+          }
+        }
+      }
+      const blob = new Blob([markdownContent], { type: "text/markdown" });
+      downloadBlob(blob, `${sanitizedName}_${timestamp}.md`);
+    }
+
+    toast({
+      title: "Export complete",
+      description: `Workflow exported as ${format.toUpperCase()}`
+    });
+  };
+
+  const saveWorkflow = () => {
+    updateWorkflowMutation.mutate({}, {
+      onSuccess: () => {
+        toast({
+          title: "Workflow saved",
+          description: "Your workflow has been saved."
+        });
+      }
+    });
+  };
+
   const completedSteps = steps.filter(s => s.status === "completed").length;
   const progress = steps.length > 0 ? (completedSteps / steps.length) * 100 : 0;
 
@@ -202,6 +364,36 @@ export default function WorkflowDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={saveWorkflow} data-testid="button-save-workflow">
+            <Save className="h-4 w-4 mr-2" />
+            Save
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="button-export-workflow">
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => exportWorkflow("markdown")} data-testid="export-markdown">
+                <FileText className="h-4 w-4 mr-2" />
+                Markdown (.md)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportWorkflow("json")} data-testid="export-json">
+                <FileJson className="h-4 w-4 mr-2" />
+                JSON (.json)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportWorkflow("html")} data-testid="export-html">
+                <FileCode className="h-4 w-4 mr-2" />
+                HTML (.html)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportWorkflow("txt")} data-testid="export-txt">
+                <File className="h-4 w-4 mr-2" />
+                Plain Text (.txt)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="outline" size="sm" data-testid="button-settings">
@@ -253,9 +445,12 @@ export default function WorkflowDetailPage() {
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="w-64 border-r flex flex-col overflow-hidden">
-          <div className="p-4 border-b">
-            <h3 className="font-medium text-sm">Documents</h3>
+        <div className="w-72 border-r flex flex-col overflow-hidden">
+          <div className="p-4 border-b flex items-center justify-between gap-2">
+            <h3 className="font-medium text-sm">Agent Outputs</h3>
+            {documents && documents.length > 0 && (
+              <Badge variant="secondary" className="text-xs">{documents.length}</Badge>
+            )}
           </div>
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-1">
@@ -264,30 +459,58 @@ export default function WorkflowDetailPage() {
                   Loading...
                 </div>
               ) : documents && documents.length > 0 ? (
-                documents.map((doc) => (
-                  <button
-                    key={doc.id}
-                    onClick={() => {
-                      setSelectedDocument(doc);
-                      setStreamingContent("");
-                    }}
-                    className={`w-full text-left p-3 rounded-md hover-elevate ${
-                      selectedDocument?.id === doc.id ? "bg-muted" : ""
-                    }`}
-                    data-testid={`button-select-doc-${doc.id}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="text-sm font-medium truncate">{doc.title}</span>
-                    </div>
-                    <Badge variant="outline" className="text-xs mt-1">
-                      {doc.outputType}
-                    </Badge>
-                  </button>
-                ))
+                agents.map((agent) => {
+                  const agentDocs = documentsByAgent[agent.id] || [];
+                  if (agentDocs.length === 0) return null;
+                  
+                  const isExpanded = expandedAgents[agent.id] !== false;
+                  
+                  return (
+                    <Collapsible 
+                      key={agent.id} 
+                      open={isExpanded}
+                      onOpenChange={(open) => toggleAgentSection(agent.id, open)}
+                    >
+                      <CollapsibleTrigger className="flex items-center justify-between gap-2 w-full p-2 rounded-md hover-elevate" data-testid={`section-${agent.id}`}>
+                        <div className="flex items-center gap-2">
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
+                          <span className="text-sm font-medium">{agent.name}</span>
+                        </div>
+                        <Badge variant="outline" className="text-xs">{agentDocs.length}</Badge>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="pl-4 space-y-1">
+                        {agentDocs.map((doc) => (
+                          <button
+                            key={doc.id}
+                            onClick={() => {
+                              setSelectedDocument(doc);
+                              setStreamingContent("");
+                            }}
+                            className={`w-full text-left p-2 rounded-md hover-elevate ${
+                              selectedDocument?.id === doc.id ? "bg-muted" : ""
+                            }`}
+                            data-testid={`button-select-doc-${doc.id}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
+                              <span className="text-xs font-medium truncate">{doc.title}</span>
+                            </div>
+                            <Badge variant="outline" className="text-xs mt-1">
+                              {doc.outputType}
+                            </Badge>
+                          </button>
+                        ))}
+                      </CollapsibleContent>
+                    </Collapsible>
+                  );
+                })
               ) : (
                 <div className="p-4 text-center text-sm text-muted-foreground">
-                  No documents yet
+                  No documents yet. Execute the workflow to generate specifications.
                 </div>
               )}
             </div>
