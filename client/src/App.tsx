@@ -13,12 +13,15 @@ import WorkflowDetailPage from "@/pages/workflow-detail";
 import ConstitutionPage from "@/pages/constitution";
 import AgentPage from "@/pages/agent";
 import DecisionFrameworkPage from "@/pages/decision-framework";
+import LandingPage from "@/pages/landing";
 import { useState } from "react";
 import { NewWorkflowDialog } from "@/components/new-workflow-dialog";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import type { AgentType } from "@shared/schema";
+import { useAuth } from "@/hooks/useAuth";
+import { Loader2 } from "lucide-react";
 
 function Router() {
   return (
@@ -34,7 +37,7 @@ function Router() {
   );
 }
 
-function AppContent() {
+function AuthenticatedApp() {
   const [showNewWorkflow, setShowNewWorkflow] = useState(false);
   const [, setLocation] = useLocation();
 
@@ -89,11 +92,30 @@ function AppContent() {
   );
 }
 
+function AppContent() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LandingPage />;
+  }
+
+  return <AuthenticatedApp />;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AppContent />
+        <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
   );
