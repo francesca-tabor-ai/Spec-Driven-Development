@@ -39,12 +39,19 @@ function AppContent() {
   const [, setLocation] = useLocation();
 
   const createWorkflowMutation = useMutation({
-    mutationFn: async (data: { name: string; description?: string; startingAgent: AgentType }) => {
+    mutationFn: async (data: { 
+      name: string; 
+      description?: string; 
+      startingAgent: AgentType;
+      contextVariables?: { key: string; value: string; description?: string }[];
+      uploadedContent?: string;
+    }) => {
       const res = await apiRequest("POST", "/api/workflows", data);
       return res.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/workflows"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       setShowNewWorkflow(false);
       setLocation(`/workflow/${data.id}`);
     }
