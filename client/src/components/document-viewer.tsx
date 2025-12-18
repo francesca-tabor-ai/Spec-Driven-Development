@@ -362,7 +362,7 @@ export function DocumentViewer({
             />
           ) : (
             <div className="prose prose-sm dark:prose-invert max-w-none" data-testid="content-document">
-              <pre className="whitespace-pre-wrap font-mono text-sm bg-muted p-4 rounded-lg overflow-x-auto">
+              <pre className="whitespace-pre-wrap font-mono text-sm bg-muted text-foreground p-4 rounded-lg overflow-x-auto">
                 {content || (isLoading && (
                   <span className="text-muted-foreground animate-pulse">
                     Generating content...
