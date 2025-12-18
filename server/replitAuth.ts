@@ -52,14 +52,30 @@ function updateUserSession(
 
 async function upsertUser(
   claims: any,
-) {
-  await storage.upsertUser({
-    id: claims["sub"],
-    email: claims["email"],
-    firstName: claims["first_name"],
-    lastName: claims["last_name"],
-    profileImageUrl: claims["profile_image_url"],
-  });
+  retries = 3
+): Promise<void> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await storage.upsertUser({
+        id: claims["sub"],
+        email: claims["email"],
+        firstName: claims["first_name"],
+        lastName: claims["last_name"],
+        profileImageUrl: claims["profile_image_url"],
+      });
+      return;
+    } catch (error: any) {
+      const isRetryable = error?.message?.includes('EAI_AGAIN') || 
+                          error?.message?.includes('ECONNRESET') ||
+                          error?.message?.includes('ETIMEDOUT');
+      if (isRetryable && attempt < retries) {
+        console.log(`Database connection failed (attempt ${attempt}/${retries}), retrying...`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      } else {
+        throw error;
+      }
+    }
+  }
 }
 
 export async function setupAuth(app: Express) {
@@ -74,10 +90,15 @@ export async function setupAuth(app: Express) {
     tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
     verified: passport.AuthenticateCallback
   ) => {
-    const user = {};
-    updateUserSession(user, tokens);
-    await upsertUser(tokens.claims());
-    verified(null, user);
+    try {
+      const user = {};
+      updateUserSession(user, tokens);
+      await upsertUser(tokens.claims());
+      verified(null, user);
+    } catch (error) {
+      console.error("Auth verification error:", error);
+      verified(error as Error);
+    }
   };
 
   const registeredStrategies = new Set<string>();
