@@ -166,8 +166,8 @@ export function NewWorkflowDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Wand2 className="h-5 w-5" />
             Create New Specification
@@ -178,8 +178,8 @@ export function NewWorkflowDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
-            <ScrollArea className="flex-1 pr-4">
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex-1 overflow-y-auto pr-2">
               <div className="space-y-5 pb-4">
               <FormField
                 control={form.control}
@@ -344,9 +344,9 @@ export function NewWorkflowDialog({
                 </CollapsibleContent>
               </Collapsible>
               </div>
-            </ScrollArea>
+            </div>
 
-            <DialogFooter className="flex-shrink-0 pt-4 gap-2 border-t mt-2">
+            <DialogFooter className="shrink-0 pt-4 gap-2 border-t mt-2">
               <Button
                 type="button"
                 variant="outline"
