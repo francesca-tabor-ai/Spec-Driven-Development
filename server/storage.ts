@@ -3,7 +3,6 @@ import {
   documents,
   documentVersions,
   settings,
-  users,
   type Workflow,
   type InsertWorkflow,
   type Document,
@@ -11,25 +10,19 @@ import {
   type DocumentVersion,
   type InsertDocumentVersion,
   type ContextVariable,
-  type AgentType,
-  type User,
-  type UpsertUser
+  type AgentType
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, and } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
-  // Users (required for Replit Auth)
-  getUser(id: string): Promise<User | undefined>;
-  upsertUser(user: UpsertUser): Promise<User>;
-
   // Workflows
   getWorkflow(id: number): Promise<Workflow | undefined>;
-  getAllWorkflows(userId?: string): Promise<Workflow[]>;
+  getAllWorkflows(): Promise<Workflow[]>;
   createWorkflow(workflow: InsertWorkflow): Promise<Workflow>;
   updateWorkflow(id: number, updates: Partial<InsertWorkflow>): Promise<Workflow | undefined>;
   deleteWorkflow(id: number): Promise<void>;
-  duplicateWorkflow(id: number, userId?: string): Promise<Workflow | undefined>;
+  duplicateWorkflow(id: number): Promise<Workflow | undefined>;
 
   // Documents
   getDocument(id: number): Promise<Document | undefined>;
@@ -52,45 +45,18 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  // Users (required for Replit Auth)
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user || undefined;
-  }
-
-  async upsertUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          ...userData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
-    return user;
-  }
-
   // Workflows
   async getWorkflow(id: number): Promise<Workflow | undefined> {
     const [workflow] = await db.select().from(workflows).where(eq(workflows.id, id));
     return workflow || undefined;
   }
 
-  async getAllWorkflows(userId?: string): Promise<Workflow[]> {
-    if (userId) {
-      return db.select().from(workflows)
-        .where(eq(workflows.userId, userId))
-        .orderBy(desc(workflows.createdAt));
-    }
+  async getAllWorkflows(): Promise<Workflow[]> {
     return db.select().from(workflows).orderBy(desc(workflows.createdAt));
   }
 
   async createWorkflow(data: InsertWorkflow): Promise<Workflow> {
     const [workflow] = await db.insert(workflows).values({
-      userId: data.userId,
       name: data.name,
       description: data.description,
       status: data.status || "draft",
@@ -113,12 +79,11 @@ export class DatabaseStorage implements IStorage {
     await db.delete(workflows).where(eq(workflows.id, id));
   }
 
-  async duplicateWorkflow(id: number, userId?: string): Promise<Workflow | undefined> {
+  async duplicateWorkflow(id: number): Promise<Workflow | undefined> {
     const original = await this.getWorkflow(id);
     if (!original) return undefined;
 
     return this.createWorkflow({
-      userId: userId || original.userId,
       name: `${original.name} (Copy)`,
       description: original.description,
       status: "draft",

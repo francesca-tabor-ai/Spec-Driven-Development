@@ -11,9 +11,7 @@ import {
   Settings,
   Plus,
   HelpCircle,
-  Upload,
-  LogOut,
-  User
+  Upload
 } from "lucide-react";
 import {
   Sidebar,
@@ -30,16 +28,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
 import type { AgentType } from "@shared/schema";
-import { useAuth } from "@/hooks/useAuth";
 
 interface NavItem {
   title: string;
@@ -73,17 +62,6 @@ interface AppSidebarProps {
 
 export function AppSidebar({ onNewWorkflow }: AppSidebarProps) {
   const [location] = useLocation();
-  const { user } = useAuth();
-
-  const getInitials = () => {
-    if (user?.firstName || user?.lastName) {
-      return `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase();
-    }
-    if (user?.email) {
-      return user.email[0].toUpperCase();
-    }
-    return 'U';
-  };
 
   return (
     <Sidebar>
@@ -149,7 +127,7 @@ export function AppSidebar({ onNewWorkflow }: AppSidebarProps) {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-3 space-y-3">
+      <SidebarFooter className="p-4">
         <Button
           className="w-full"
           onClick={onNewWorkflow}
@@ -158,37 +136,6 @@ export function AppSidebar({ onNewWorkflow }: AppSidebarProps) {
           <Plus className="h-4 w-4 mr-2" />
           New Specification
         </Button>
-
-        <SidebarSeparator />
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="w-full justify-start gap-2 h-auto py-2" data-testid="button-user-menu">
-              <Avatar className="h-7 w-7">
-                <AvatarImage src={user?.profileImageUrl || undefined} />
-                <AvatarFallback className="text-xs">{getInitials()}</AvatarFallback>
-              </Avatar>
-              <div className="flex flex-col items-start text-left min-w-0 flex-1">
-                <span className="text-sm truncate w-full">
-                  {user?.firstName || user?.email || 'User'}
-                </span>
-                {user?.email && user?.firstName && (
-                  <span className="text-xs text-muted-foreground truncate w-full">
-                    {user.email}
-                  </span>
-                )}
-              </div>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuItem asChild>
-              <a href="/api/logout" className="flex items-center gap-2 cursor-pointer" data-testid="button-logout">
-                <LogOut className="h-4 w-4" />
-                Sign Out
-              </a>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </SidebarFooter>
     </Sidebar>
   );

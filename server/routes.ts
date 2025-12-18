@@ -5,7 +5,6 @@ import { z } from "zod";
 import multer from "multer";
 import { storage } from "./storage";
 import { getPromptForAgent, getOutputTypeForAgent } from "./prompts";
-import { setupAuth, isAuthenticated } from "./replitAuth";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -49,21 +48,6 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Setup authentication
-  await setupAuth(app);
-
-  // Auth route - get current user
-  app.get("/api/auth/user", isAuthenticated, async (req: any, res: Response) => {
-    try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
-    } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
-    }
-  });
-
   // Stats
   app.get("/api/stats", async (req: Request, res: Response) => {
     try {
@@ -75,11 +59,10 @@ export async function registerRoutes(
     }
   });
 
-  // Workflows - protected routes
-  app.get("/api/workflows", isAuthenticated, async (req: any, res: Response) => {
+  // Workflows
+  app.get("/api/workflows", async (req: Request, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
-      const workflows = await storage.getAllWorkflows(userId);
+      const workflows = await storage.getAllWorkflows();
       res.json(workflows);
     } catch (error) {
       console.error("Error getting workflows:", error);
@@ -87,7 +70,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/workflows/:id", isAuthenticated, async (req: any, res: Response) => {
+  app.get("/api/workflows/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
@@ -97,11 +80,6 @@ export async function registerRoutes(
       if (!workflow) {
         return res.status(404).json({ error: "Workflow not found" });
       }
-      // Check ownership
-      const userId = req.user.claims.sub;
-      if (workflow.userId && workflow.userId !== userId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
       res.json(workflow);
     } catch (error) {
       console.error("Error getting workflow:", error);
@@ -109,7 +87,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/workflows", isAuthenticated, async (req: any, res: Response) => {
+  app.post("/api/workflows", async (req: Request, res: Response) => {
     try {
       const parseResult = createWorkflowBodySchema.safeParse(req.body);
       if (!parseResult.success) {
@@ -119,7 +97,6 @@ export async function registerRoutes(
         });
       }
 
-      const userId = req.user.claims.sub;
       const { name, description, startingAgent, contextVariables: providedContextVars, uploadedContent } = parseResult.data;
       const agentType = startingAgent || "analyst";
       
@@ -137,7 +114,6 @@ export async function registerRoutes(
       }
 
       const workflow = await storage.createWorkflow({
-        userId,
         name,
         description: fullDescription,
         status: "draft",
@@ -152,17 +128,11 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/workflows/:id", isAuthenticated, async (req: any, res: Response) => {
+  app.patch("/api/workflows/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
         return res.status(400).json({ error: "Invalid workflow ID" });
-      }
-      // Check ownership
-      const existing = await storage.getWorkflow(id);
-      const userId = req.user.claims.sub;
-      if (existing?.userId && existing.userId !== userId) {
-        return res.status(403).json({ error: "Access denied" });
       }
       const workflow = await storage.updateWorkflow(id, req.body);
       if (!workflow) {
@@ -175,17 +145,11 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/workflows/:id", isAuthenticated, async (req: any, res: Response) => {
+  app.delete("/api/workflows/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
         return res.status(400).json({ error: "Invalid workflow ID" });
-      }
-      // Check ownership
-      const existing = await storage.getWorkflow(id);
-      const userId = req.user.claims.sub;
-      if (existing?.userId && existing.userId !== userId) {
-        return res.status(403).json({ error: "Access denied" });
       }
       await storage.deleteWorkflow(id);
       res.status(204).send();
@@ -195,14 +159,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/workflows/:id/duplicate", isAuthenticated, async (req: any, res: Response) => {
+  app.post("/api/workflows/:id/duplicate", async (req: Request, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
         return res.status(400).json({ error: "Invalid workflow ID" });
       }
-      const workflow = await storage.duplicateWorkflow(id, userId);
+      const workflow = await storage.duplicateWorkflow(id);
       if (!workflow) {
         return res.status(404).json({ error: "Workflow not found" });
       }
