@@ -3,9 +3,6 @@ import { createServer, type Server } from "http";
 import OpenAI from "openai";
 import { z } from "zod";
 import multer from "multer";
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
 import { storage } from "./storage";
 import { getPromptForAgent, getOutputTypeForAgent } from "./prompts";
 
@@ -514,6 +511,9 @@ Respond ONLY with valid JSON.`;
       const fileName = req.file.originalname;
 
       if (req.file.mimetype === "application/pdf") {
+        // Dynamic import for pdf-parse to handle ESM/CJS compatibility
+        const pdfParseModule = await import("pdf-parse");
+        const pdfParse = (pdfParseModule as any).default || pdfParseModule;
         const pdfData = await pdfParse(req.file.buffer);
         textContent = pdfData.text;
       } else if (req.file.mimetype === "text/plain") {
